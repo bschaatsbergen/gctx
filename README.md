@@ -8,6 +8,7 @@ switch who gcloud acts as, but ADC lives in one shared file: every org
 switch means another `gcloud auth application-default login` browser
 round-trip. gctx captures ADC once per context and re-points client
 libraries when you switch, so changing orgs never repeats an auth flow.
+Helpful if you work in many different Google Cloud Organizations.
 
 ```console
 $ gctx
