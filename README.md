@@ -7,12 +7,12 @@ client libraries act as, per shell.
 
 ```console
 $ gctx
-CURRENT   NAME    ACCOUNT            PROJECT      ADC
-*         org1    me@company.com     example      ~/.config/gcloud/adc-org1.json
-          org2    me@company.com     example      ~/.config/gcloud/adc-org2.json
+CURRENT   NAME    ACCOUNT         PROJECT      ADC
+*         acme    you@acme.com                 ~/.config/gcloud/adc-acme.json
+          hooli   you@hooli.com                ~/.config/gcloud/adc-hooli.json
 
-$ gctx org1
-✓ org1
+$ gctx hooli
+✓ hooli
 ```
 
 ## Install
@@ -36,19 +36,19 @@ own install instructions.
 ## Setup
 
 ```sh
-gctx login work --project work-proj   # create context, authenticate
-gctx adc login work                   # capture ADC for it
+gctx login acme --project acme-prod   # create context, authenticate
+gctx adc login acme                   # capture ADC for it
 ```
 
-Already have an ADC file? `gctx adc capture work` adopts it.
+Already have an ADC file? `gctx adc capture acme` adopts it.
 `gctx adc list` shows captured files.
 
 ## Usage
 
 ```console
 $ gctx                    # list contexts
-$ gctx work               # switch this shell
+$ gctx acme               # switch this shell
 $ gctx -                  # previous context
 $ gctx reset              # drop per-shell overrides
-$ gctx config use-context work    # switch all shells
+$ gctx config use-context acme    # switch all shells
 ```
