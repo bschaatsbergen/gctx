@@ -170,6 +170,8 @@ Config commands:
   gctx config use-context <name>
                           Switch the global context (writes active_config);
                           affects every shell without a per-shell override.
+                          Links the well-known ADC file to the context's
+                          captured ADC; a foreign file there is set aside.
   gctx config set-context <name> [--account <email>] [--project <id>]
                           Create or modify a context. --account only binds an
                           account reference; run 'gctx login <name>' to
@@ -187,8 +189,10 @@ Auth:
                           Create <name> if missing, then 'gcloud auth login
                           --no-update-adc' pinned to it.
   gctx adc login <name>   Run 'gcloud auth application-default login' pinned to
-                          <name> and capture the result as adc-<name>.json,
-                          preserving any existing well-known ADC file.
+                          <name> and capture the result as adc-<name>.json.
+                          For the global context the well-known ADC path is
+                          relinked so renewals propagate; a foreign file there
+                          is preserved.
   gctx adc capture <name> Adopt the existing well-known ADC file by moving it
                           to adc-<name>.json.
   gctx adc list           List captured ADC files.

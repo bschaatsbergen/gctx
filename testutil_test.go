@@ -74,3 +74,18 @@ func exists(path string) bool {
 	_, err := os.Stat(path)
 	return err == nil
 }
+
+func requireLink(t *testing.T, path, target string) {
+	t.Helper()
+	fi, err := os.Lstat(path)
+	require.NoError(t, err)
+	require.True(t, fi.Mode()&os.ModeSymlink != 0, "%s is not a symlink", path)
+	got, err := os.Readlink(path)
+	require.NoError(t, err)
+	require.Equal(t, target, got)
+}
+
+func isSymlink(path string) bool {
+	fi, err := os.Lstat(path)
+	return err == nil && fi.Mode()&os.ModeSymlink != 0
+}

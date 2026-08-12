@@ -75,7 +75,9 @@ func (a *app) runADCLogin(args []string) int {
 	wk := s.wellKnownADC()
 	backup := wk + ".gctx-backup"
 	haveBackup := false
-	if fileExists(wk) {
+	// Lstat-based: a dangling gctx link must be set aside too, or gcloud
+	// would write the fresh credential through it into the wrong file.
+	if pathExists(wk) {
 		if err := os.Rename(wk, backup); err != nil {
 			return a.errf("could not set aside existing ADC file: %v", err)
 		}
@@ -109,6 +111,9 @@ func (a *app) runADCLogin(args []string) int {
 	}
 	restore()
 	fmt.Fprintf(a.stderr, "Captured ADC for context %q at %s.\n", name, s.adcPath(name))
+	if name == s.globalName() {
+		a.syncWellKnownADC(s, name)
+	}
 	return 0
 }
 
@@ -124,6 +129,9 @@ func (a *app) runADCCapture(args []string) int {
 		return a.unknownContext(s, name)
 	}
 	wk := s.wellKnownADC()
+	if isLink(wk) {
+		return a.errf("%s is a gctx-managed link, nothing to capture (renew with `gctx adc login %s` instead)", wk, name)
+	}
 	if !fileExists(wk) {
 		return a.errf("no well-known ADC file at %s to capture (run `gctx adc login %s` instead)", wk, name)
 	}
@@ -131,6 +139,9 @@ func (a *app) runADCCapture(args []string) int {
 		return a.errf("%v", err)
 	}
 	fmt.Fprintf(a.stderr, "Captured ADC for context %q at %s.\n", name, s.adcPath(name))
+	if name == s.globalName() {
+		a.syncWellKnownADC(s, name)
+	}
 	return 0
 }
 

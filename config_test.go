@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -133,6 +134,66 @@ func TestUseContextUnknown(t *testing.T) {
 	assert.Equal(t, "a", strings.TrimSpace(mustRead(t, filepath.Join(dir, "active_config"))))
 	assert.Contains(t, stderr.String(), "nosuch")
 	assert.Contains(t, stderr.String(), "b")
+}
+
+func TestUseContextLinksCapturedADC(t *testing.T) {
+	dir := writeFixture(t)
+	wk := filepath.Join(dir, "application_default_credentials.json")
+	a, _, _ := newTestApp(dir, nil)
+	require.Equal(t, 0, a.run([]string{"config", "use-context", "b"}))
+	requireLink(t, wk, "adc-b.json")
+	assert.Equal(t, mustRead(t, filepath.Join(dir, "adc-b.json")), mustRead(t, wk))
+}
+
+func TestUseContextSavesForeignWellKnownFile(t *testing.T) {
+	dir := writeFixture(t)
+	wk := filepath.Join(dir, "application_default_credentials.json")
+	mustWrite(t, wk, "FOREIGN")
+	a, _, stderr := newTestApp(dir, nil)
+	require.Equal(t, 0, a.run([]string{"config", "use-context", "b"}))
+	requireLink(t, wk, "adc-b.json")
+	assert.Equal(t, "FOREIGN", mustRead(t, wk+".gctx-saved"))
+	assert.Contains(t, stderr.String(), ".gctx-saved")
+}
+
+func TestUseContextWithoutCapturedADCRemovesManagedLink(t *testing.T) {
+	dir := writeFixture(t)
+	wk := filepath.Join(dir, "application_default_credentials.json")
+	require.NoError(t, os.Symlink("adc-b.json", wk))
+	a, _, stderr := newTestApp(dir, nil)
+	require.Equal(t, 0, a.run([]string{"config", "use-context", "a"}))
+	assert.False(t, exists(wk))
+	assert.False(t, isSymlink(wk))
+	assert.Contains(t, stderr.String(), "gctx adc login a")
+}
+
+func TestUseContextWithoutCapturedADCLeavesForeignFile(t *testing.T) {
+	dir := writeFixture(t)
+	wk := filepath.Join(dir, "application_default_credentials.json")
+	mustWrite(t, wk, "FOREIGN")
+	a, _, _ := newTestApp(dir, nil)
+	require.Equal(t, 0, a.run([]string{"config", "use-context", "a"}))
+	assert.False(t, isSymlink(wk))
+	assert.Equal(t, "FOREIGN", mustRead(t, wk))
+}
+
+func TestRenameContextRepointsWellKnownLink(t *testing.T) {
+	dir := writeFixture(t)
+	wk := filepath.Join(dir, "application_default_credentials.json")
+	require.NoError(t, os.Symlink("adc-b.json", wk))
+	a, _, _ := newTestApp(dir, nil)
+	require.Equal(t, 0, a.run([]string{"config", "rename-context", "b", "c"}))
+	requireLink(t, wk, "adc-c.json")
+}
+
+func TestDeleteContextRemovesItsWellKnownLink(t *testing.T) {
+	dir := writeFixture(t)
+	wk := filepath.Join(dir, "application_default_credentials.json")
+	require.NoError(t, os.Symlink("adc-b.json", wk))
+	a, _, _ := newTestApp(dir, nil)
+	require.Equal(t, 0, a.run([]string{"config", "delete-context", "b"}))
+	assert.False(t, exists(filepath.Join(dir, "adc-b.json")))
+	assert.False(t, isSymlink(wk))
 }
 
 func TestSetContextCreates(t *testing.T) {

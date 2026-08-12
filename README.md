@@ -51,6 +51,10 @@ Move the global default; every shell follows:
 gctx config use-context acme2
 ```
 
+This also links the well-known ADC file to the context's captured ADC, so
+client libraries and new terminals follow along and pick up renewals
+instantly. A foreign file at that path is set aside, never overwritten.
+
 To pin a different org per terminal instead, see
 [per-shell switching](#per-shell-switching) below.
 
@@ -102,3 +106,11 @@ gctx reset
 
 Per-shell switching also points `GOOGLE_APPLICATION_CREDENTIALS` at the
 context's captured ADC file, so client libraries switch with the shell.
+
+## Security
+
+gctx never reads, parses or transmits credentials. All authentication is
+performed by gcloud itself; gctx only moves the ADC files gcloud writes,
+maintains a symlink at the well-known ADC path, and points environment
+variables at the captured files. The only files it reads are gcloud's
+plain text configuration files, which hold an account name and a project id.

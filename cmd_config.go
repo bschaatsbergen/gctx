@@ -121,6 +121,7 @@ func (a *app) runUseContext(args []string) int {
 		return a.errf("%v", err)
 	}
 	fmt.Fprintf(a.stderr, "Switched global context to %q.\n", name)
+	a.syncWellKnownADC(s, name)
 	return 0
 }
 
@@ -185,6 +186,13 @@ func (a *app) runDeleteContext(args []string) int {
 			return a.errf("%v", err)
 		}
 	}
+	// Never leave the well-known link dangling at the deleted ADC file.
+	wk := s.wellKnownADC()
+	if isLink(wk) {
+		if got, err := os.Readlink(wk); err == nil && got == "adc-"+name+".json" {
+			os.Remove(wk)
+		}
+	}
 	fmt.Fprintf(a.stderr, "Deleted context %q.\n", name)
 	return 0
 }
@@ -215,6 +223,12 @@ func (a *app) runRenameContext(args []string) int {
 	if s.globalName() == oldName {
 		if err := s.setGlobalName(newName); err != nil {
 			return a.errf("%v", err)
+		}
+	}
+	wk := s.wellKnownADC()
+	if isLink(wk) {
+		if got, err := os.Readlink(wk); err == nil && got == "adc-"+oldName+".json" {
+			a.syncWellKnownADC(s, newName)
 		}
 	}
 	fmt.Fprintf(a.stderr, "Renamed context %q to %q.\n", oldName, newName)

@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -72,7 +73,7 @@ func TestLoginGcloudFailure(t *testing.T) {
 	assert.Contains(t, stderr.String(), "auth failed")
 }
 
-func TestADCLoginCapturesAndRestoresWellKnown(t *testing.T) {
+func TestADCLoginGlobalContextSavesWellKnownAndLinks(t *testing.T) {
 	dir := writeFixture(t)
 	wk := filepath.Join(dir, "application_default_credentials.json")
 	mustWrite(t, wk, "OLD-IDENTITY")
@@ -87,12 +88,55 @@ func TestADCLoginCapturesAndRestoresWellKnown(t *testing.T) {
 	require.Equal(t, 0, a.run([]string{"adc", "login", "a"}))
 
 	assert.Equal(t, "NEW-a", mustRead(t, filepath.Join(dir, "adc-a.json")))
-	assert.Equal(t, "OLD-IDENTITY", mustRead(t, wk))
+	requireLink(t, wk, "adc-a.json")
+	assert.Equal(t, "NEW-a", mustRead(t, wk))
+	assert.Equal(t, "OLD-IDENTITY", mustRead(t, wk+".gctx-saved"))
 	assert.False(t, exists(wk+".gctx-backup"))
 	require.Len(t, fake.calls, 2)
 	assert.Equal(t, "a", fake.calls[1].configName)
 	assert.Equal(t, []string{"auth", "application-default", "set-quota-project", "proj-a"}, fake.calls[1].args)
 	assert.Empty(t, stdout.String())
+}
+
+func TestADCLoginNonGlobalRestoresWellKnown(t *testing.T) {
+	dir := writeFixture(t)
+	wk := filepath.Join(dir, "application_default_credentials.json")
+	mustWrite(t, wk, "OLD-IDENTITY")
+	fake := &fakeGcloud{handler: func(configName string, args ...string) error {
+		if isADCLogin(args) {
+			mustWriteRaw(wk, "NEW-"+configName)
+		}
+		return nil
+	}}
+	a, _, _ := newTestApp(dir, nil)
+	a.runGcloud = fake.run
+	require.Equal(t, 0, a.run([]string{"adc", "login", "b"}))
+
+	assert.Equal(t, "NEW-b", mustRead(t, filepath.Join(dir, "adc-b.json")))
+	assert.False(t, isSymlink(wk))
+	assert.Equal(t, "OLD-IDENTITY", mustRead(t, wk))
+	assert.False(t, exists(wk+".gctx-backup"))
+	assert.False(t, exists(wk+".gctx-saved"))
+}
+
+func TestADCLoginSetsAsideDanglingLink(t *testing.T) {
+	dir := writeFixture(t)
+	wk := filepath.Join(dir, "application_default_credentials.json")
+	require.NoError(t, os.Symlink("adc-x.json", wk))
+	fake := &fakeGcloud{handler: func(configName string, args ...string) error {
+		if isADCLogin(args) {
+			mustWriteRaw(wk, "NEW-"+configName)
+		}
+		return nil
+	}}
+	a, _, _ := newTestApp(dir, nil)
+	a.runGcloud = fake.run
+	require.Equal(t, 0, a.run([]string{"adc", "login", "b"}))
+
+	assert.Equal(t, "NEW-b", mustRead(t, filepath.Join(dir, "adc-b.json")))
+	assert.False(t, exists(filepath.Join(dir, "adc-x.json")),
+		"gcloud must never write through a dangling well-known link")
+	requireLink(t, wk, "adc-x.json")
 }
 
 func TestADCLoginRestoresWellKnownOnFailure(t *testing.T) {
@@ -123,7 +167,7 @@ func TestADCLoginWithoutPreexistingWellKnown(t *testing.T) {
 	require.Equal(t, 0, a.run([]string{"adc", "login", "a"}))
 
 	assert.Equal(t, "NEW-a", mustRead(t, filepath.Join(dir, "adc-a.json")))
-	assert.False(t, exists(wk))
+	requireLink(t, wk, "adc-a.json")
 }
 
 func TestADCLoginQuotaProjectFailureIsWarning(t *testing.T) {
@@ -170,14 +214,36 @@ func TestADCLoginUnknownContext(t *testing.T) {
 	assert.Contains(t, stderr.String(), "nosuch")
 }
 
-func TestADCCaptureMovesWellKnown(t *testing.T) {
+func TestADCCaptureMovesWellKnownAndLinksGlobal(t *testing.T) {
 	dir := writeFixture(t)
 	wk := filepath.Join(dir, "application_default_credentials.json")
 	mustWrite(t, wk, "ADOPT-ME")
 	a, _, _ := newTestApp(dir, nil)
 	require.Equal(t, 0, a.run([]string{"adc", "capture", "a"}))
 	assert.Equal(t, "ADOPT-ME", mustRead(t, filepath.Join(dir, "adc-a.json")))
+	requireLink(t, wk, "adc-a.json")
+}
+
+func TestADCCaptureNonGlobalLeavesNoWellKnown(t *testing.T) {
+	dir := writeFixture(t)
+	wk := filepath.Join(dir, "application_default_credentials.json")
+	mustWrite(t, wk, "ADOPT-ME")
+	a, _, _ := newTestApp(dir, nil)
+	require.Equal(t, 0, a.run([]string{"adc", "capture", "b"}))
+	assert.Equal(t, "ADOPT-ME", mustRead(t, filepath.Join(dir, "adc-b.json")))
 	assert.False(t, exists(wk), "well-known file must be moved, not copied")
+	assert.False(t, isSymlink(wk))
+}
+
+func TestADCCaptureRefusesManagedLink(t *testing.T) {
+	dir := writeFixture(t)
+	wk := filepath.Join(dir, "application_default_credentials.json")
+	require.NoError(t, os.Symlink("adc-b.json", wk))
+	a, _, stderr := newTestApp(dir, nil)
+	require.NotEqual(t, 0, a.run([]string{"adc", "capture", "a"}))
+	assert.False(t, exists(filepath.Join(dir, "adc-a.json")))
+	requireLink(t, wk, "adc-b.json")
+	assert.Contains(t, stderr.String(), "link")
 }
 
 func TestADCCaptureWithoutWellKnown(t *testing.T) {
