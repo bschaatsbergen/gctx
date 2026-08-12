@@ -62,7 +62,7 @@ __gctx_switch() {
         export GCTX_PREV
     fi
     unset __gctx_prev __gctx_env
-    printf '✓ %s\n' "$1"
+    printf 'Switched to context "%s".\n' "$1"
 }
 
 gctx() {
@@ -85,7 +85,7 @@ gctx() {
             if __gctx_env="$(command gctx env --reset --shell posix)"; then
                 eval "$__gctx_env"
                 unset __gctx_env GCTX_PREV
-                printf '✓ reset\n'
+                printf 'Reset to the global context.\n'
             else
                 unset __gctx_env
                 return 1
@@ -114,7 +114,7 @@ function __gctx_switch
     if test -n "$prev"
         set -gx GCTX_PREV $prev
     end
-    echo "✓ $argv[1]"
+    echo "Switched to context \"$argv[1]\"."
 end
 
 function gctx
@@ -137,7 +137,7 @@ function gctx
                 return 1
             end
             set -e GCTX_PREV
-            echo "✓ reset"
+            echo "Reset to the global context."
         case '-*'
             command gctx $argv
         case '*'
@@ -172,7 +172,7 @@ function __GctxSwitch([string]$Name) {
     if ($LASTEXITCODE -ne 0) { return }
     __GctxApply $out
     if ($prev) { $env:GCTX_PREV = "$prev" }
-    Write-Host "✓ $Name"
+    Write-Host "Switched to context ""$Name""."
 }
 
 function gctx {
@@ -201,7 +201,7 @@ function gctx {
             if ($LASTEXITCODE -ne 0) { return }
             __GctxApply $out
             Remove-Item Env:GCTX_PREV -ErrorAction Ignore
-            Write-Host '✓ reset'
+            Write-Host 'Reset to the global context.'
             return
         }
         default {
@@ -254,7 +254,7 @@ def --env __gctx_switch [name: string] {
     if ($prev | is-not-empty) {
         load-env {GCTX_PREV: $prev}
     }
-    print $"✓ ($name)"
+    print $"Switched to context \"($name)\"."
 }
 
 def --env gctx [...args: string@"nu-complete gctx"] {
@@ -280,7 +280,7 @@ def --env gctx [...args: string@"nu-complete gctx"] {
         # call do not propagate.
         hide-env --ignore-errors GCTX_PREV
         __gctx_apply $res.stdout
-        print "✓ reset"
+        print "Reset to the global context."
     } else if ($cmd | str starts-with '-') {
         ^gctx ...$args
     } else {
