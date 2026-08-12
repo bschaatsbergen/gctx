@@ -32,23 +32,3 @@ source <(gctx completion bash)
 
 fish, powershell, and nu are also supported; `gctx init <shell>` prints its
 own install instructions.
-
-## Setup
-
-```sh
-gctx login acme --project acme-prod   # create context, authenticate
-gctx adc login acme                   # capture ADC for it
-```
-
-Already have an ADC file? `gctx adc capture acme` adopts it.
-`gctx adc list` shows captured files.
-
-## Usage
-
-```console
-$ gctx                    # list contexts
-$ gctx acme               # switch this shell
-$ gctx -                  # previous context
-$ gctx reset              # drop per-shell overrides
-$ gctx config use-context acme    # switch all shells
-```
