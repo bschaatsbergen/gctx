@@ -64,6 +64,19 @@ func TestLoginCreatesMissingContextAndSetsProject(t *testing.T) {
 	assert.Equal(t, []string{"auth", "login", "--no-update-adc"}, fake.calls[0].args)
 }
 
+func TestLoginPassesThroughFlagsAfterDoubleDash(t *testing.T) {
+	dir := writeFixture(t)
+	fake := &fakeGcloud{}
+	a, _, _ := newTestApp(dir, nil)
+	a.runGcloud = fake.run
+	require.Equal(t, 0, a.run([]string{"login", "a", "--project", "proj-a", "--", "--no-launch-browser"}))
+
+	ini := parseINI(mustRead(t, filepath.Join(dir, "configurations", "config_a")))
+	assert.Equal(t, "proj-a", ini["core"]["project"])
+	require.Len(t, fake.calls, 1)
+	assert.Equal(t, []string{"auth", "login", "--no-update-adc", "--no-launch-browser"}, fake.calls[0].args)
+}
+
 func TestLoginGcloudFailure(t *testing.T) {
 	dir := writeFixture(t)
 	fake := &fakeGcloud{handler: func(string, ...string) error { return errors.New("auth failed") }}
@@ -202,6 +215,24 @@ func TestADCLoginContextWithoutProjectSkipsQuota(t *testing.T) {
 	a.runGcloud = fake.run
 	require.Equal(t, 0, a.run([]string{"adc", "login", "d"}))
 	assert.Len(t, fake.calls, 1)
+}
+
+func TestADCLoginPassesThroughExtraFlags(t *testing.T) {
+	dir := writeFixture(t)
+	wk := filepath.Join(dir, "application_default_credentials.json")
+	fake := &fakeGcloud{handler: func(configName string, args ...string) error {
+		if len(args) > 0 && args[0] == "auth" && args[1] == "application-default" && args[2] == "login" {
+			mustWriteRaw(wk, "NEW-"+configName)
+		}
+		return nil
+	}}
+	a, _, _ := newTestApp(dir, nil)
+	a.runGcloud = fake.run
+	require.Equal(t, 0, a.run([]string{"adc", "login", "a", "--", "--no-launch-browser"}))
+
+	assert.Equal(t, "NEW-a", mustRead(t, filepath.Join(dir, "adc-a.json")))
+	require.NotEmpty(t, fake.calls)
+	assert.Equal(t, []string{"auth", "application-default", "login", "--no-launch-browser"}, fake.calls[0].args)
 }
 
 func TestADCLoginUnknownContext(t *testing.T) {

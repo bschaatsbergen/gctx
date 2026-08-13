@@ -3,17 +3,23 @@ package main
 import (
 	"fmt"
 	"os"
+	"slices"
 	"text/tabwriter"
 )
 
 func (a *app) runLogin(args []string) int {
+	// Everything after "--" is opaque and passed straight to gcloud.
+	gctxArgs, extra := args, []string(nil)
+	if i := slices.Index(args, "--"); i >= 0 {
+		gctxArgs, extra = args[:i], args[i+1:]
+	}
 	var project string
-	pos, err := parseArgs(args, map[string]*string{"--project": &project}, nil)
+	pos, err := parseArgs(gctxArgs, map[string]*string{"--project": &project}, nil)
 	if err != nil {
 		return a.errf("%v", err)
 	}
 	if len(pos) != 1 {
-		return a.errf("usage: gctx login <name> [--project <id>]")
+		return a.errf("usage: gctx login <name> [--project <id>] [-- gcloud flags...]")
 	}
 	name := pos[0]
 	s := a.store()
@@ -26,7 +32,8 @@ func (a *app) runLogin(args []string) int {
 		}
 	}
 	// --no-update-adc: user auth must never rewrite the ADC file.
-	if err := a.runGcloud(name, "auth", "login", "--no-update-adc"); err != nil {
+	loginArgs := append([]string{"auth", "login", "--no-update-adc"}, extra...)
+	if err := a.runGcloud(name, loginArgs...); err != nil {
 		return a.errf("gcloud auth login failed: %v", err)
 	}
 	if project != "" {
@@ -62,10 +69,15 @@ func (a *app) runADC(args []string) int {
 // runADCLogin captures ADC for a context. Any existing well-known ADC file is
 // set aside first and restored afterwards, on failure and success alike.
 func (a *app) runADCLogin(args []string) int {
-	if len(args) != 1 {
-		return a.errf("usage: gctx adc login <name>")
+	// Everything after "--" is opaque and passed straight to gcloud.
+	gctxArgs, extra := args, []string(nil)
+	if i := slices.Index(args, "--"); i >= 0 {
+		gctxArgs, extra = args[:i], args[i+1:]
 	}
-	name := args[0]
+	if len(gctxArgs) != 1 {
+		return a.errf("usage: gctx adc login <name> [-- gcloud flags...]")
+	}
+	name := gctxArgs[0]
 	s := a.store()
 	c, ok := s.lookup(name)
 	if !ok {
@@ -91,7 +103,8 @@ func (a *app) runADCLogin(args []string) int {
 		}
 	}
 
-	if err := a.runGcloud(name, "auth", "application-default", "login"); err != nil {
+	loginArgs := append([]string{"auth", "application-default", "login"}, extra...)
+	if err := a.runGcloud(name, loginArgs...); err != nil {
 		restore()
 		return a.errf("gcloud auth application-default login failed: %v", err)
 	}
