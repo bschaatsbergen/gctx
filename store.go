@@ -124,3 +124,8 @@ func fileExists(path string) bool {
 	fi, err := os.Stat(path)
 	return err == nil && !fi.IsDir()
 }
+
+// joinConfig keeps path building in one place for files gctx owns.
+func joinConfig(dir, name string) string {
+	return filepath.Join(dir, name)
+}
