@@ -73,6 +73,23 @@ Show the active context's resolved settings:
 gctx config view
 ```
 
+Mark a context you would rather not lose to a typo:
+
+```sh
+gctx config protect prod
+gctx config delete-context prod     # refused
+gctx config delete-context prod --force
+gctx config unprotect prod
+```
+
+A protected context still switches, authenticates and renews ADC as usual. The
+mark only applies to `delete-context` and `rename-context`, the two commands
+that cannot be undone. It travels with the context when you rename it, and is
+removed when the context is.
+
+This guards gctx's own commands. It is not a permission boundary and has no
+effect on what gcloud will let you do; IAM is the place for that.
+
 ## Per-shell switching
 
 Pin a context to one terminal, so different orgs run side by side. This

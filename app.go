@@ -183,6 +183,11 @@ Config commands:
                           Rename a context, its ADC file, and the global
                           pointer if it pointed at <old>.
   gctx config view        Show the effective context's resolved settings.
+  gctx config protect <name>
+                          Refuse delete-context and rename-context on <name>
+                          unless --force is given.
+  gctx config unprotect <name>
+                          Remove that mark.
 
 Auth:
   gctx login <name> [--project <id>]
