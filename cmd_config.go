@@ -27,6 +27,10 @@ func (a *app) runConfig(args []string) int {
 		return a.runDeleteContext(rest)
 	case "rename-context":
 		return a.runRenameContext(rest)
+	case "protect":
+		return a.runProtect(rest)
+	case "unprotect":
+		return a.runUnprotect(rest)
 	case "view":
 		return a.runView(rest)
 	default:
@@ -55,16 +59,17 @@ func (a *app) runGetContexts(args []string) int {
 		}
 	case "json":
 		type record struct {
-			Name    string `json:"name"`
-			Current bool   `json:"current"`
-			Global  bool   `json:"global"`
-			Account string `json:"account"`
-			Project string `json:"project"`
-			ADC     string `json:"adc"`
+			Name      string `json:"name"`
+			Current   bool   `json:"current"`
+			Global    bool   `json:"global"`
+			Account   string `json:"account"`
+			Project   string `json:"project"`
+			ADC       string `json:"adc"`
+			Protected bool   `json:"protected"`
 		}
 		records := make([]record, 0, len(cs))
 		for _, c := range cs {
-			records = append(records, record{c.name, c.name == effective, c.name == global, c.account, c.project, c.adc})
+			records = append(records, record{c.name, c.name == effective, c.name == global, c.account, c.project, c.adc, s.isProtected(c.name)})
 		}
 		enc := json.NewEncoder(a.stdout)
 		enc.SetIndent("", "  ")
@@ -77,7 +82,7 @@ func (a *app) runGetContexts(args []string) int {
 			return 0
 		}
 		tw := tabwriter.NewWriter(a.stdout, 0, 0, 3, ' ', 0)
-		fmt.Fprintln(tw, "CURRENT\tNAME\tACCOUNT\tPROJECT\tADC")
+		fmt.Fprintln(tw, "CURRENT\tNAME\tACCOUNT\tPROJECT\tADC\tPROTECTED")
 		for _, c := range cs {
 			marker := ""
 			switch {
@@ -86,7 +91,11 @@ func (a *app) runGetContexts(args []string) int {
 			case c.name == global:
 				marker = "(global)"
 			}
-			fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n", marker, c.name, c.account, c.project, c.adc)
+			protected := ""
+			if s.isProtected(c.name) {
+				protected = "yes"
+			}
+			fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\n", marker, c.name, c.account, c.project, c.adc, protected)
 		}
 		tw.Flush()
 	default:
@@ -167,13 +176,17 @@ func (a *app) runSetContext(args []string) int {
 }
 
 func (a *app) runDeleteContext(args []string) int {
+	args, force := takeForce(args)
 	if len(args) != 1 {
-		return a.errf("usage: gctx config delete-context <name>")
+		return a.errf("usage: gctx config delete-context <name> [--force]")
 	}
 	name := args[0]
 	s := a.store()
 	if _, ok := s.lookup(name); !ok {
 		return a.unknownContext(s, name)
+	}
+	if a.blockedByProtection(s, name, "delete", force) {
+		return 1
 	}
 	if name == s.globalName() {
 		return a.errf("refusing to delete %q: it is the global current context; switch away first with `gctx config use-context <other>`", name)
@@ -193,18 +206,26 @@ func (a *app) runDeleteContext(args []string) int {
 			os.Remove(wk)
 		}
 	}
+	// Leave no orphan mark behind for a future context that reuses the name.
+	if s.isProtected(name) {
+		os.Remove(s.protectPath(name))
+	}
 	fmt.Fprintf(a.stderr, "Deleted context %q.\n", name)
 	return 0
 }
 
 func (a *app) runRenameContext(args []string) int {
+	args, force := takeForce(args)
 	if len(args) != 2 {
-		return a.errf("usage: gctx config rename-context <old> <new>")
+		return a.errf("usage: gctx config rename-context <old> <new> [--force]")
 	}
 	oldName, newName := args[0], args[1]
 	s := a.store()
 	if _, ok := s.lookup(oldName); !ok {
 		return a.unknownContext(s, oldName)
+	}
+	if a.blockedByProtection(s, oldName, "rename", force) {
+		return 1
 	}
 	if !contextNameRE.MatchString(newName) {
 		return a.errf("invalid context name %q: use lowercase letters, digits and hyphens, starting with a letter", newName)
@@ -231,6 +252,13 @@ func (a *app) runRenameContext(args []string) int {
 			a.syncWellKnownADC(s, newName)
 		}
 	}
+	// A rename must not quietly drop protection.
+	if s.isProtected(oldName) {
+		if err := os.Rename(s.protectPath(oldName), s.protectPath(newName)); err != nil {
+			return a.errf("%v", err)
+		}
+	}
+
 	fmt.Fprintf(a.stderr, "Renamed context %q to %q.\n", oldName, newName)
 	return 0
 }
