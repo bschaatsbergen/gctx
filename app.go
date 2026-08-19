@@ -40,6 +40,8 @@ func (a *app) run(args []string) int {
 		return a.runInit(rest)
 	case "completion":
 		return a.runCompletion(rest)
+	case "doctor":
+		return a.runDoctor(rest)
 	case "version", "--version":
 		fmt.Fprintf(a.stdout, "gctx %s\n", version)
 		return 0
@@ -196,6 +198,10 @@ Auth:
   gctx adc capture <name> Adopt the existing well-known ADC file by moving it
                           to adc-<name>.json.
   gctx adc list           List captured ADC files.
+
+Checks:
+  gctx doctor [--fix]     Report credential material left behind in gcloud's own
+                          logs. Exits 1 when there is something to report.
 
 Shell plumbing:
   gctx env <name> [--shell posix|fish|powershell|nu]

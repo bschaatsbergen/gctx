@@ -107,6 +107,25 @@ gctx reset
 Per-shell switching also points `GOOGLE_APPLICATION_CREDENTIALS` at the
 context's captured ADC file, so client libraries switch with the shell.
 
+## Checking for leftover credentials
+
+gcloud writes its own debug logs under `<config-dir>/logs`, and an auth flow
+leaves the resulting tokens in them in clear text. `gcloud auth revoke`
+invalidates the credential with Google but does not remove the log, so a refresh
+token can stay readable on disk after the account it belonged to is gone.
+Refresh tokens remain valid until they are revoked or go unused for months.
+
+```sh
+gctx doctor          # list affected files, exit 1 if there are any
+gctx doctor --fix    # delete them
+```
+
+The report gives file paths and match counts. It never prints the matched text.
+
+gctx does not create these logs and cannot stop gcloud writing them. Deleting
+them does not un-issue a token that was already exposed, so rotate anything you
+have reason to worry about.
+
 ## Security
 
 gctx never reads, parses or transmits credentials. All authentication is
