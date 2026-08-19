@@ -27,6 +27,9 @@ import (
 type finding struct {
 	path   string
 	counts map[string]int
+	// longLived is true when at least one match on this file outlives the hour
+	// an access token gets.
+	longLived bool
 }
 
 // Patterns match the shape of the value, not the field name around it. Field
@@ -34,10 +37,14 @@ type finding struct {
 var credentialPatterns = []struct {
 	label string
 	re    *regexp.Regexp
+	// longLived marks the ones still worth acting on. An access token expires
+	// about an hour after it is written, so a log full of them is usually noise;
+	// a refresh token or a private key stays useful until somebody revokes it.
+	longLived bool
 }{
-	{"oauth access token", regexp.MustCompile(`ya29\.[A-Za-z0-9._\-]{20,}`)},
-	{"oauth refresh token", regexp.MustCompile(`1//[A-Za-z0-9._\-]{20,}`)},
-	{"service account private key", regexp.MustCompile(`-----BEGIN[ A-Z]*PRIVATE KEY-----`)},
+	{"oauth refresh token", regexp.MustCompile(`1//[A-Za-z0-9._\-]{20,}`), true},
+	{"service account private key", regexp.MustCompile(`-----BEGIN[ A-Z]*PRIVATE KEY-----`), true},
+	{"oauth access token", regexp.MustCompile(`ya29\.[A-Za-z0-9._\-]{20,}`), false},
 }
 
 func (a *app) runDoctor(args []string) int {
@@ -65,10 +72,13 @@ func (a *app) runDoctor(args []string) int {
 		return 0
 	}
 
-	total := 0
+	total, live := 0, 0
 	for _, f := range findings {
 		for _, n := range f.counts {
 			total += n
+		}
+		if f.longLived {
+			live++
 		}
 	}
 	fmt.Fprintf(a.stdout, "Found credential material in %d log file(s) under %s\n\n", len(findings), logDir)
@@ -78,13 +88,24 @@ func (a *app) runDoctor(args []string) int {
 			labels = append(labels, fmt.Sprintf("%s x%d", label, n))
 		}
 		sort.Strings(labels)
-		fmt.Fprintf(a.stdout, "  %s\n      %s\n", f.path, strings.Join(labels, ", "))
+		mark := " "
+		if f.longLived {
+			mark = "!"
+		}
+		fmt.Fprintf(a.stdout, "%s %s\n      %s\n", mark, f.path, strings.Join(labels, ", "))
 	}
 
 	if !fix {
-		fmt.Fprintf(a.stdout, "\n%d match(es). These logs are diagnostic output; nothing reads them back.\n", total)
+		fmt.Fprintf(a.stdout, "\n%d match(es) in %d file(s).\n", total, len(findings))
+		if live > 0 {
+			fmt.Fprintf(a.stdout, "%d file(s) marked ! hold a refresh token or private key. Those stay valid until\n", live)
+			fmt.Fprint(a.stdout, "revoked, so start there - deleting the log does not un-issue what was written.\n")
+		}
+		if live < len(findings) {
+			fmt.Fprintf(a.stdout, "The other %d hold access tokens only, which expire about an hour after they are\n", len(findings)-live)
+			fmt.Fprint(a.stdout, "written; those are almost certainly dead already.\n")
+		}
 		fmt.Fprint(a.stdout, "Run `gctx doctor --fix` to delete the files listed above.\n")
-		fmt.Fprint(a.stdout, "Revoking an account does not clear logs already written, so rotate anything you consider exposed.\n")
 		return 1
 	}
 
@@ -122,20 +143,28 @@ func scanForCredentials(dir string) ([]finding, error) {
 			return nil
 		}
 		counts := map[string]int{}
+		longLived := false
 		for _, p := range credentialPatterns {
 			if n := len(p.re.FindAll(b, -1)); n > 0 {
 				counts[p.label] = n
+				longLived = longLived || p.longLived
 			}
 		}
 		if len(counts) > 0 {
-			out = append(out, finding{path: path, counts: counts})
+			out = append(out, finding{path: path, counts: counts, longLived: longLived})
 		}
 		return nil
 	})
 	if err != nil {
 		return nil, err
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].path < out[j].path })
+	// Long-lived first: that is the part of the list worth reading.
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].longLived != out[j].longLived {
+			return out[i].longLived
+		}
+		return out[i].path < out[j].path
+	})
 	return out, nil
 }
 
@@ -148,6 +177,10 @@ can stay readable on disk long after the account is gone.
 Usage:
   gctx doctor         Report affected files. Exits 1 when there is something to report.
   gctx doctor --fix   Delete the affected log files.
+
+Files marked ! contain a refresh token or a private key, which stay valid until
+revoked. The rest hold access tokens, which expire about an hour after they are
+written.
 
 Paths and match counts are printed. The matched text never is.
 `

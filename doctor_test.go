@@ -103,3 +103,42 @@ func TestDoctorRejectsUnknownFlag(t *testing.T) {
 	require.Equal(t, 1, a.run([]string{"doctor", "--purge"}))
 	assert.Contains(t, strings.ToLower(stderr.String()), "unknown flag")
 }
+
+func TestDoctorPutsLongLivedFirst(t *testing.T) {
+	dir := writeFixture(t)
+	// Written oldest-name-first so a plain path sort would put the access-token
+	// file on top; the refresh-token file must still lead.
+	writeLog(t, dir, "2026.01.05", "a-access.log", "token: "+fakeAccessToken)
+	refresh := writeLog(t, dir, "2026.01.05", "z-refresh.log", "token: "+fakeRefreshToken)
+
+	a, stdout, _ := newTestApp(dir, nil)
+	require.Equal(t, 1, a.run([]string{"doctor"}))
+	out := stdout.String()
+
+	assert.Less(t, strings.Index(out, refresh), strings.Index(out, "a-access.log"),
+		"the file holding a refresh token should be listed first")
+	assert.Contains(t, out, "! "+refresh, "long-lived findings carry the ! marker")
+	assert.Contains(t, out, "expire about an hour", "short-lived findings should be described as such")
+}
+
+func TestDoctorAccessTokensOnlyAreNotMarked(t *testing.T) {
+	dir := writeFixture(t)
+	p := writeLog(t, dir, "2026.01.06", "only-access.log", "token: "+fakeAccessToken)
+
+	a, stdout, _ := newTestApp(dir, nil)
+	require.Equal(t, 1, a.run([]string{"doctor"}))
+	out := stdout.String()
+
+	assert.NotContains(t, out, "! "+p, "an access token alone is not a standing risk")
+	assert.NotContains(t, out, "refresh token or private key",
+		"do not warn about long-lived material when there is none")
+}
+
+func TestDoctorPrivateKeyCountsAsLongLived(t *testing.T) {
+	dir := writeFixture(t)
+	p := writeLog(t, dir, "2026.01.07", "sa.log", fakePrivateKey)
+
+	a, stdout, _ := newTestApp(dir, nil)
+	require.Equal(t, 1, a.run([]string{"doctor"}))
+	assert.Contains(t, stdout.String(), "! "+p)
+}
