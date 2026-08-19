@@ -87,6 +87,9 @@ mark only applies to `delete-context` and `rename-context`, the two commands
 that cannot be undone. It travels with the context when you rename it, and is
 removed when the context is.
 
+`gctx config get-contexts` shows a PROTECTED column, and the JSON output carries
+a `protected` field.
+
 This guards gctx's own commands. It is not a permission boundary and has no
 effect on what gcloud will let you do; IAM is the place for that.
 

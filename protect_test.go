@@ -1,6 +1,8 @@
 package main
 
 import (
+	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -88,4 +90,37 @@ func TestUnprotectedDeleteIsUnchanged(t *testing.T) {
 	a, _, _ := newTestApp(dir, nil)
 	require.Equal(t, 0, a.run([]string{"config", "delete-context", "b"}))
 	assert.False(t, exists(a.store().configPath("b")))
+}
+
+func TestGetContextsShowsProtection(t *testing.T) {
+	// Marking a context is useless if nothing ever shows it back to you.
+	dir := writeFixture(t)
+	a, _, _ := newTestApp(dir, nil)
+	require.Equal(t, 0, a.run([]string{"config", "protect", "b"}))
+
+	a2, stdout, _ := newTestApp(dir, nil)
+	require.Equal(t, 0, a2.run([]string{"config", "get-contexts"}))
+	out := stdout.String()
+
+	assert.Contains(t, strings.Split(out, "\n")[0], "PROTECTED")
+	assert.Contains(t, tableRow(t, out, "b"), "yes")
+	assert.NotContains(t, tableRow(t, out, "a"), "yes")
+}
+
+func TestGetContextsJSONCarriesProtection(t *testing.T) {
+	dir := writeFixture(t)
+	a, _, _ := newTestApp(dir, nil)
+	require.Equal(t, 0, a.run([]string{"config", "protect", "b"}))
+
+	a2, stdout, _ := newTestApp(dir, nil)
+	require.Equal(t, 0, a2.run([]string{"config", "get-contexts", "-o", "json"}))
+
+	var recs []map[string]any
+	require.NoError(t, json.Unmarshal(stdout.Bytes(), &recs))
+	got := map[string]any{}
+	for _, r := range recs {
+		got[r["name"].(string)] = r["protected"]
+	}
+	assert.Equal(t, true, got["b"])
+	assert.Equal(t, false, got["a"])
 }

@@ -59,16 +59,17 @@ func (a *app) runGetContexts(args []string) int {
 		}
 	case "json":
 		type record struct {
-			Name    string `json:"name"`
-			Current bool   `json:"current"`
-			Global  bool   `json:"global"`
-			Account string `json:"account"`
-			Project string `json:"project"`
-			ADC     string `json:"adc"`
+			Name      string `json:"name"`
+			Current   bool   `json:"current"`
+			Global    bool   `json:"global"`
+			Account   string `json:"account"`
+			Project   string `json:"project"`
+			ADC       string `json:"adc"`
+			Protected bool   `json:"protected"`
 		}
 		records := make([]record, 0, len(cs))
 		for _, c := range cs {
-			records = append(records, record{c.name, c.name == effective, c.name == global, c.account, c.project, c.adc})
+			records = append(records, record{c.name, c.name == effective, c.name == global, c.account, c.project, c.adc, s.isProtected(c.name)})
 		}
 		enc := json.NewEncoder(a.stdout)
 		enc.SetIndent("", "  ")
@@ -81,7 +82,7 @@ func (a *app) runGetContexts(args []string) int {
 			return 0
 		}
 		tw := tabwriter.NewWriter(a.stdout, 0, 0, 3, ' ', 0)
-		fmt.Fprintln(tw, "CURRENT\tNAME\tACCOUNT\tPROJECT\tADC")
+		fmt.Fprintln(tw, "CURRENT\tNAME\tACCOUNT\tPROJECT\tADC\tPROTECTED")
 		for _, c := range cs {
 			marker := ""
 			switch {
@@ -90,7 +91,11 @@ func (a *app) runGetContexts(args []string) int {
 			case c.name == global:
 				marker = "(global)"
 			}
-			fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n", marker, c.name, c.account, c.project, c.adc)
+			protected := ""
+			if s.isProtected(c.name) {
+				protected = "yes"
+			}
+			fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\n", marker, c.name, c.account, c.project, c.adc, protected)
 		}
 		tw.Flush()
 	default:
