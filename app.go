@@ -190,11 +190,16 @@ Config commands:
                           Remove that mark.
 
 Auth:
-  gctx login <name> [--project <id>]
+  gctx login <name> [--project <id>] [-- gcloud flags...]
                           Create <name> if missing, then 'gcloud auth login
-                          --no-update-adc' pinned to it.
-  gctx adc login <name>   Run 'gcloud auth application-default login' pinned to
+                          --no-update-adc' pinned to it. Flags after -- (e.g.
+                          -- --no-launch-browser) are passed through to gcloud
+                          unchanged.
+  gctx adc login <name> [-- gcloud flags...]
+                          Run 'gcloud auth application-default login' pinned to
                           <name> and capture the result as adc-<name>.json.
+                          Flags after -- (e.g. -- --no-launch-browser) are
+                          passed through to gcloud unchanged.
                           For the global context the well-known ADC path is
                           relinked so renewals propagate; a foreign file there
                           is preserved.
